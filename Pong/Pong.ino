@@ -3,6 +3,8 @@
 #include <Adafruit_ST7789.h> // Hardware-specific library for ST7789
 #include <SPI.h>
 
+// SDA no pino 23
+// SDL no pino 18
 #define TFT_CS        5 // Hallowing display control pins: chip select
 #define TFT_RST       4 // Display reset
 #define TFT_DC        16 // Display data/command select
@@ -10,25 +12,11 @@
 
 #define SerialDebugging true
 
-// OPTION 1 (recommended) is to use the HARDWARE SPI pins, which are unique
-// to each board and not reassignable. For Arduino Uno: MOSI = pin 11 and
-// SCLK = pin 13. This is the fastest mode of operation and is required if
-// using the breakout board's microSD card.
 
-// For 1.44" and 1.8" TFT with ST7735 (including HalloWing) use:
 Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_RST);
 
-// For 1.3", 1.54", and 2.0" TFT with ST7789:
-//Adafruit_ST7789 tft = Adafruit_ST7789(TFT_CS, TFT_DC, TFT_RST);
-
-// OPTION 2 lets you interface the display using ANY TWO or THREE PINS,
-// tradeoff being that performance is not as fast as hardware SPI above.
-//#define TFT_MOSI 11  // Data out
-//#define TFT_SCLK 13  // Clock out
-//Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_MOSI, TFT_SCLK, TFT_RST);
-
-// connect a push button between ground and...
-const uint8_t   Button_pin              = 2;
+#define botaoEsq 2
+#define botaoDir 27
 
 // color definitions
 const uint16_t  Display_Color_Black        = 0x0000;
@@ -41,8 +29,8 @@ const uint16_t  Display_Color_Yellow       = 0xFFE0;
 const uint16_t  Display_Color_White        = 0xFFFF;
 
 // The colors we actually want to use
-uint16_t        Display_Text_Color         = Display_Color_Black;
-uint16_t        Display_Backround_Color    = Display_Color_White;
+uint16_t        Display_Text_Color         = Display_Color_White;
+uint16_t        Display_Backround_Color    = Display_Color_Black;
 
 // assume the display is off until configured in setup()
 bool            isDisplayVisible        = false;
@@ -50,87 +38,46 @@ bool            isDisplayVisible        = false;
 // declare size of working string buffers. Basic strlen("d hh:mm:ss") = 10
 const size_t    MaxString               = 16;
 
-// the string being displayed on the SSD1331 (initially empty)
-char oldTimeString[MaxString]           = { 0 };
+// Para alterar variaveis dentro de uma interrupção tem que usar as variaveis do tipo volatile
+// Para informar que a variavel pode ser alterada a qualquer instante
+volatile bool   isButtonPressedEsq = false;
+volatile bool   isButtonPressedDir = false;
 
-// the interrupt service routine affects this
-volatile bool   isButtonPressed         = false;
-
+bool testeCor = false;
 
 // interrupt service routine
-void senseButtonPressed() {
-    if (!isButtonPressed) {
-        isButtonPressed = true;
+void senseButtonPressedEsq() {
+    if (!isButtonPressedEsq) {
+        isButtonPressedEsq = true;
+    }
+}
+void senseButtonPressedDir() {
+    if (!isButtonPressedDir) {
+        isButtonPressedDir = true;
     }
 }
 
-
-void displayUpTime() {
-
-    // calculate seconds, truncated to the nearest whole second
-    unsigned long upSeconds = millis() / 1000;
-
-    // calculate days, truncated to nearest whole day
-    unsigned long days = upSeconds / 86400;
-
-    // the remaining hhmmss are
-    upSeconds = upSeconds % 86400;
-
-    // calculate hours, truncated to the nearest whole hour
-    unsigned long hours = upSeconds / 3600;
-
-    // the remaining mmss are
-    upSeconds = upSeconds % 3600;
-
-    // calculate minutes, truncated to the nearest whole minute
-    unsigned long minutes = upSeconds / 60;
-
-    // the remaining ss are
-    upSeconds = upSeconds % 60;
-
-    // allocate a buffer
-    char newTimeString[MaxString] = { 0 };
-
-    // construct the string representation
-    sprintf(
-        newTimeString,
-        "%lu %02lu:%02lu:%02lu",
-        days, hours, minutes, upSeconds
-    );
-
-    // has the time string changed since the last tft update?
-    if (strcmp(newTimeString,oldTimeString) != 0) {
-
-        // yes! home the cursor
-        tft.setCursor(0,0);
-
-        // change the text color to the background color
-        tft.setTextColor(Display_Backround_Color);
-
-        // redraw the old value to erase
-        tft.print(oldTimeString);
-
-        // home the cursor
-        tft.setCursor(3,3);
-        
-        // change the text color to foreground color
-        tft.setTextColor(Display_Text_Color);
-    
-        // draw the new time value
-        tft.print("Testando o Display");
-    
-        // and remember the new value
-        strcpy(oldTimeString,newTimeString);
-    }
+void mudaCor(){
+  if(testeCor){
+    tft.fillScreen(Display_Color_Black);
+    testeCor = false;
+  }
+  else{
+    tft.fillScreen(Display_Color_White);
+    testeCor = true;
+  }
 }
 
 void setup() {
 
     // button press pulls pin LOW so configure HIGH
-    pinMode(Button_pin,INPUT_PULLUP);
+    pinMode(botaoEsq, INPUT_PULLUP);
+    pinMode(botaoDir, INPUT_PULLUP);
 
-    // use an interrupt to sense when the button is pressed
-    attachInterrupt(digitalPinToInterrupt(Button_pin), senseButtonPressed, FALLING);
+    // Usa interrupção ou seja o microcontrolador vai estar verificando esse pino a todo momento
+    // Quando ele vê que foi acionado ele pausa o código principal para executar o codigo atrelado a esse pino
+    attachInterrupt(digitalPinToInterrupt(botaoEsq), senseButtonPressedEsq, FALLING);
+    attachInterrupt(digitalPinToInterrupt(botaoDir), senseButtonPressedDir, FALLING);
 
     #if (SerialDebugging)
     Serial.begin(115200); while (!Serial); Serial.println();
@@ -140,7 +87,7 @@ void setup() {
     delay(250);
 
     // ignore any power-on-reboot garbage
-    isButtonPressed = false;
+    isButtonPressedEsq = isButtonPressedDir = false;
 
     #ifdef ADAFRUIT_HALLOWING
       // HalloWing is a special case. It uses a ST7735R display just like the
@@ -165,38 +112,24 @@ void setup() {
 
     // the display is now on
     isDisplayVisible = true;
+    tft.enableDisplay(isDisplayVisible);
 
 }
 
 void loop() {
-
-    // unconditional display, regardless of whether display is visible
-    displayUpTime();
-
     // has the button been pressed?
-    if (isButtonPressed) {
-        
-        // yes! toggle display visibility
-        isDisplayVisible = !isDisplayVisible;
-
-        // apply
-        tft.enableDisplay(isDisplayVisible);
-
-        #if (SerialDebugging)
-        Serial.print("button pressed @ ");
-        Serial.print(millis());
-        Serial.print(", display is now ");
-        Serial.println((isDisplayVisible ? "ON" : "OFF"));
-        #endif
-
+    if (isButtonPressedEsq) {
         // confirm button handled
-        isButtonPressed = false;
-        
+        isButtonPressedEsq = false; 
+        mudaCor();
     }
-
+    if(isButtonPressedDir) {
+        // confirm button handled
+        isButtonPressedDir = false;
+        mudaCor();
+    }
     // no need to be in too much of a hurry
     delay(100);
    
 }
-
 
